@@ -152,13 +152,16 @@ def fuse_as_graphmodule(gm: GraphModule,
     for node in nodes:
         new_node = subgraph.node_copy(node, remap_inputs)
         node_map[node] = new_node
+        if node.op == 'placeholder': # placeholder node also in nodes
+            node_to_placeholder[node] = new_node
 
     # handles outputs
     output_mapping: Dict[Node, Node] = {}  # mapping from old output to new outputs
 
     for node in nodes:
         for user_node in node.users:
-            if user_node not in nodes:
+			# If node is placeholder, treating them as output nodes will result in circular dependencies
+            if user_node not in nodes and node not in node_to_placeholder:
                 # external user node, need to expose as an output
                 output_mapping[node] = node_map[node]
 
@@ -212,7 +215,8 @@ def erase_nodes(gm: GraphModule, nodes: NodeList):
 
     # erase original nodes in inversed topological order
     for node in reversed(nodes):
-        gm.graph.erase_node(node)
+        if len(node.users) == 0:
+            gm.graph.erase_node(node)
 
 
 @compatibility(is_backward_compatible=False)
